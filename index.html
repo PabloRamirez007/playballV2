@@ -655,9 +655,9 @@ main{padding:20px 24px 60px;position:relative;z-index:1}
 
 <div class="sortbar">
   <span class="sort-lbl">ORDEN:</span>
-  <div class="schip active" data-sort="heat" onclick="setSort('heat')">🔥 CALOR</div>
-  <div class="schip" data-sort="close" onclick="setSort('close')">⚡ CERRADO</div>
-  <div class="schip" data-sort="goals" onclick="setSort('goals')">🎯 GOLES</div>
+  <div class="schip active" data-sort="heat" onclick="setSort('heat')">🔥 TOP</div>
+  <div class="schip" data-sort="close" onclick="setSort('close')">⚡ IGUALADO</div>
+  <div class="schip goals-chip" data-sort="goals" onclick="setSort('goals')" id="goalsChip">🎯 GOLES</div>
   <div class="schip" data-sort="prestige" onclick="setSort('prestige')">⭐ PRESTIGIO</div>
   <div class="upd-badge" id="updBadge"><div class="udot"></div>Cargando...</div>
 </div>
@@ -675,16 +675,16 @@ main{padding:20px 24px 60px;position:relative;z-index:1}
   <div class="section">
     <div class="sec-hdr">
       <div class="sec-icon">🔴</div>
-      <div class="sec-title">En Vivo Ahora</div>
+      <div class="sec-title" id="secTitleLive">En Vivo Ahora</div>
       <div class="sec-line live-line"></div>
-      <div class="sec-meta" id="sortLbl">TOP POR CALOR</div>
+      <div class="sec-meta" id="sortLbl">TOP</div>
     </div>
     <div class="grid" id="liveGrid"><div class="empty-state">Cargando partidos...</div></div>
   </div>
   <div class="section">
     <div class="sec-hdr">
       <div class="sec-icon">✓</div>
-      <div class="sec-title">Recientes</div>
+      <div class="sec-title" id="secTitleRecent">Recientes</div>
       <div class="sec-line rec-line"></div>
     </div>
     <div class="grid" id="recentGrid"></div>
@@ -692,7 +692,7 @@ main{padding:20px 24px 60px;position:relative;z-index:1}
   <div class="section">
     <div class="sec-hdr">
       <div class="sec-icon">📅</div>
-      <div class="sec-title">Próximos</div>
+      <div class="sec-title" id="secTitleNext">Próximos</div>
       <div class="sec-line next-line"></div>
     </div>
     <div class="grid" id="upcomingGrid"></div>
@@ -735,15 +735,14 @@ main{padding:20px 24px 60px;position:relative;z-index:1}
       <div class="mtab active" onclick="showTab('stats')">📊 STATS</div>
       <div class="mtab" onclick="showTab('players')">🏅 JUGADORES</div>
       <div class="mtab" onclick="showTab('lineup')">👥 ALINEACIÓN</div>
-      <div class="mtab" onclick="showTab('feed')">⚡ EN VIVO</div>
+      <div class="mtab" onclick="showTab('feed')">⚡ JUGADAS</div>
       <div class="mtab" onclick="showTab('watch')">📺 VER</div>
       <div class="mtab" onclick="showTab('ai')">🤖 AI</div>
     </div>
 
     <div class="tab-content active" id="tab-stats">
-      <div class="dgrid" style="margin-top:12px">
+      <div style="margin-top:12px">
         <div class="panel"><div class="ptitle">Estadísticas del Partido</div><div id="statsW"></div></div>
-        <div class="panel"><div class="ptitle" id="feedTitle">Minuto a Minuto</div><div class="fscroll" id="feedScroll"></div></div>
       </div>
     </div>
 
@@ -755,11 +754,13 @@ main{padding:20px 24px 60px;position:relative;z-index:1}
     </div>
 
     <div class="tab-content" id="tab-lineup">
-      <div class="panel" style="margin-top:12px">
-        <div class="ptitle">Alineación y Posiciones</div>
-        <div id="lineupContent"></div>
-        <div style="margin-top:14px">
-          <div class="ptitle">Cambios</div>
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:12px">
+        <div class="panel">
+          <div class="ptitle">Alineación y Posiciones</div>
+          <div id="lineupContent"></div>
+        </div>
+        <div class="panel">
+          <div class="ptitle">Cambios y Sustituciones</div>
           <div id="subsContent"></div>
         </div>
       </div>
@@ -767,8 +768,8 @@ main{padding:20px 24px 60px;position:relative;z-index:1}
 
     <div class="tab-content" id="tab-feed">
       <div class="panel" style="margin-top:12px">
-        <div class="ptitle" id="feedTitle2">En Vivo</div>
-        <div class="fscroll" id="feedScroll2"></div>
+        <div class="ptitle" id="feedTitle">Minuto a Minuto</div>
+        <div class="fscroll" id="feedScroll"></div>
       </div>
     </div>
 
@@ -888,7 +889,8 @@ function setPill(id, state) {
 // ── ESPN PARSER ───────────────────────────────────
 function espnStatus(ev) {
   const s = ev.status?.type?.name || '';
-  if (s === 'STATUS_IN_PROGRESS' || s === 'STATUS_HALFTIME') return 'live';
+  if (s === 'STATUS_IN_PROGRESS') return 'live';
+  if (s === 'STATUS_HALFTIME') return 'live_halftime'; // live but clock frozen
   if (s === 'STATUS_FINAL' || s === 'STATUS_POSTPONED') return 'final';
   return 'scheduled';
 }
@@ -920,7 +922,9 @@ function espnToMatch(ev, sport, leagueKey) {
   const awayName=awayC.team?.displayName||awayC.team?.name||'Away';
   const homeAbbr=(homeC.team?.abbreviation||makeAbbr(homeName)).slice(0,4).toUpperCase();
   const awayAbbr=(awayC.team?.abbreviation||makeAbbr(awayName)).slice(0,4).toUpperCase();
-  const status=espnStatus(ev);
+  const rawStatus=espnStatus(ev);
+  const status=rawStatus==='live_halftime'?'live':rawStatus;
+  const clockStopped=rawStatus==='live_halftime';
   const homeScore=parseInt(homeC.score||0);
   const awayScore=parseInt(awayC.score||0);
   const base={
@@ -928,11 +932,13 @@ function espnToMatch(ev, sport, leagueKey) {
     home:{abbr:homeAbbr,name:homeName}, away:{abbr:awayAbbr,name:awayName},
     score:{home:status==='scheduled'?0:homeScore, away:status==='scheduled'?0:awayScore},
     watch:WATCH_BY_SPORT[sport]||['ESPN'], source:'ESPN',
+    clockStopped:clockStopped||false,
   };
   if(status==='live') {
     if(sport==='football'){
       const clk=ev.status?.displayClock||'';
       base.minute=parseInt(clk)||Math.max(1,(ev.status?.period||1)*22);
+      if(clockStopped) base.clockStopped=true;
     } else if(sport==='basketball'){
       base.quarter=`Q${ev.status?.period||1}`;
       base.gameClock=ev.status?.displayClock||'12:00';
@@ -966,7 +972,10 @@ function nbaToMatch(game) {
     base.quarter=`Q${game.period||1}`;
     const clk=game.gameClock||'PT12M00.00S';
     const m=clk.match(/PT(\d+)M(\d+)/);
-    base.gameClock=m?`${m[1]}:${m[2].padStart(2,'0')}`:'12:00';
+    const mins=m?parseInt(m[1]):12, secs=m?parseInt(m[2]):0;
+    base.gameClock=m?`${mins}:${String(secs).padStart(2,'0')}`:'12:00';
+    // Detect stopped clock: 0:00 or clock hasn't changed (handled in initLocalClocks)
+    if(mins===0&&secs===0) base.clockStopped=true;
   } else if(status==='scheduled'){
     base.time=fmtTime(game.gameTimeUTC);
   }
@@ -1083,28 +1092,4 @@ async function loadLiveData(silent=false) {
   hideLoader();
 
   if (data.length > 0) {
-    MATCHES = data;
-    MATCHES.filter(m=>m.status==='live'&&m.sport==='football').forEach(m=>{
-      liveMin[m.id]=m.minute||1;
-    });
-    renderAll();
-    const proxies=['allorigins','corsproxy','codetabs','directo'];
-    document.getElementById('updBadge').innerHTML=
-      `<div class="udot"></div>${proxies[workingProxyIdx]||'ok'} · ${new Date().toLocaleTimeString('es-DO',{hour12:false})}`;
-    if(!silent) showToast('✓ Datos actualizados');
-  } else {
-    document.getElementById('liveGrid').innerHTML=`
-      <div class="empty-state" style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:50px 20px">
-        <div style="font-size:2rem">📡</div>
-        <div style="color:var(--gold);font-family:'Bebas Neue';font-size:1.1rem;letter-spacing:3px">Sin señal de APIs</div>
-        <div style="font-size:.68rem;color:var(--t3);max-width:300px;text-align:center;line-height:1.8;font-family:'JetBrains Mono'">
-          Todos los proxies fallaron.<br>Intenta desde Live Server en VS Code.
-        </div>
-        <div onclick="manualRefreshLive()" style="cursor:pointer;border:1px solid var(--electric);
-          color:var(--electric);padding:8px 20px;border-radius:5px;
-          font-family:'Bebas Neue';font-size:.9rem;letter-spacing:3px;
-          background:rgba(0,229,255,.05);margin-top:4px">↻ REINTENTAR</div>
-      </div>`;
-    document.getElementById('recentGrid').innerHTML='';
-    document.getElementById('upcomingGrid').innerHTML='';
-    document.getElementById('updBadge').innerHTML=`<div class="udot" style="background:var(--hot)"><... (Tiempo restante: 60 KB)
+    MATCHES = d... (Tiempo restante: 65 KB)
